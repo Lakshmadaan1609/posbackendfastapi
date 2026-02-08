@@ -1,0 +1,9 @@
+fastapi==0.104.1
+uvicorn[standard]
+python-dotenv
+sqlalchemy
+psycopg2-binary
+alembic
+pydantic
+pydantic-settings
+supabase
