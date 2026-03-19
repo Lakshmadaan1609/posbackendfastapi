@@ -11,7 +11,8 @@ from typing import Optional
 from datetime import datetime, date, time
 from sales import router as sales_router
 
-# Load environment variables
+# Load environment variables (.env.local preferred, fallback to .env)
+load_dotenv(".env.local")
 load_dotenv()
 
 app = FastAPI(
@@ -259,9 +260,15 @@ async def create_manufacturing(
         db.rollback()
         if cursor:
             cursor.close()
+        error_message = str(e)
+        if "duplicate key value violates unique constraint" in error_message:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Distribution record already exists for cart_id {data.cart_id} on date {check_date}. Use PUT endpoint to update."
+            )
         raise HTTPException(
             status_code=400,
-            detail=f"Database integrity error: {str(e)}"
+            detail=f"Database integrity error: {error_message}"
         )
     except psycopg2.Error as e:
         db.rollback()
@@ -605,7 +612,7 @@ async def create_distribution(
     try:
         cursor = db.cursor(cursor_factory=RealDictCursor)
         
-        # Determine the date to check
+        # Determine the date to check (defaults to today's date)
         if data.date:
             check_date = data.date.date() if isinstance(data.date, datetime) else data.date
         else:
@@ -632,16 +639,15 @@ async def create_distribution(
         fields = ["cart_id"]
         values = [data.cart_id]
         placeholders = ["%s"]
-        
-        # Add date if provided, otherwise let DB use default (now())
-        if data.date:
-            if isinstance(check_date, date):
-                date_datetime = datetime.combine(check_date, time.min)
-            else:
-                date_datetime = data.date
-            fields.append("date")
-            values.append(date_datetime)
-            placeholders.append("%s")
+
+        # Always store explicit date value to match sales endpoint behavior
+        if data.date and isinstance(data.date, datetime):
+            date_datetime = data.date
+        else:
+            date_datetime = datetime.combine(check_date, time.min)
+        fields.append("date")
+        values.append(date_datetime)
+        placeholders.append("%s")
         
         # Add other fields if provided
         field_mapping = {
@@ -690,9 +696,15 @@ async def create_distribution(
         db.rollback()
         if cursor:
             cursor.close()
+        error_message = str(e)
+        if "duplicate key value violates unique constraint" in error_message:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Distribution record already exists for cart_id {data.cart_id} on date {check_date}. Use PUT endpoint to update."
+            )
         raise HTTPException(
             status_code=400,
-            detail=f"Database integrity error: {str(e)}"
+            detail=f"Database integrity error: {error_message}"
         )
     except psycopg2.Error as e:
         db.rollback()
@@ -726,7 +738,7 @@ async def update_or_create_distribution(
     """
     cursor = None
     
-    # Determine the date to check
+    # Determine the date to check (defaults to today's date)
     if data.date:
         check_date = data.date.date() if isinstance(data.date, datetime) else data.date
     else:
@@ -806,11 +818,11 @@ async def update_or_create_distribution(
             values = [data.cart_id]
             placeholders = ["%s"]
             
-            # Add date (use the check_date, convert to datetime if needed)
-            if isinstance(check_date, date):
-                date_datetime = datetime.combine(check_date, time.min)
+            # Add date to inserted row
+            if data.date and isinstance(data.date, datetime):
+                date_datetime = data.date
             else:
-                date_datetime = check_date
+                date_datetime = datetime.combine(check_date, time.min)
             
             fields.append("date")
             values.append(date_datetime)

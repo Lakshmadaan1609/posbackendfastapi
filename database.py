@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 from contextlib import contextmanager
 from typing import Optional
 
-# Load environment variables first
+# Load environment variables first (.env.local preferred, fallback to .env)
+load_dotenv(".env.local")
 load_dotenv()
 
 # Database configuration
